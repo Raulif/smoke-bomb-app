@@ -40,7 +40,7 @@ A mobile game for friend groups who go out clubbing together. Players sneak out 
 ## Core Game Logic
 
 - One smoke bomb active per session at a time
-- Smoke bomb activation is **silent** — no notification sent to the group
+- Smoke bomb activation is **silent** — no notification sent to the group or information on the app
 - Timer starts on activation
 - Session ends when:
   - Thrower presses "I'm home"
@@ -113,10 +113,10 @@ All of the following must sync instantly across all players via **Supabase real-
 
 ## Current Status
 
-- [ ] Step 1 — Auth and user profiles
-- [ ] Step 2 — Group creation and joining
-- [ ] Step 3 — Session management
-- [ ] Step 4 — Smoke bomb mechanic and timer
+- [x] Step 1 — Auth and user profiles
+- [x] Step 2 — Group creation and joining
+- [x] Step 3 — Session management
+- [x] Step 4 — Smoke bomb mechanic and timer
 - [ ] Step 5 — Points system
 - [ ] Step 6 — Accusations mechanic
 - [ ] Step 7 — Smoke Trail

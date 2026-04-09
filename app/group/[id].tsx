@@ -14,24 +14,32 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getGroup, getGroupMembers, type MemberWithProfile } from '../../lib/groups';
+import { getActiveSession, createSession } from '../../lib/sessions';
 import { generateAvatarUrl } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
-import type { GroupRow } from '../../lib/types';
+import type { GroupRow, SessionRow } from '../../lib/types';
 
 export default function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
   const [group, setGroup] = useState<GroupRow | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
+  const [activeSession, setActiveSession] = useState<SessionRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [g, m] = await Promise.all([getGroup(id), getGroupMembers(id)]);
+      const [g, m, s] = await Promise.all([
+        getGroup(id),
+        getGroupMembers(id),
+        getActiveSession(id),
+      ]);
       setGroup(g);
       setMembers(m);
+      setActiveSession(s);
     } catch {
       Alert.alert('Error', 'Could not load group.');
     } finally {
@@ -56,6 +64,23 @@ export default function GroupScreen() {
     } catch {
       // user cancelled share sheet
     }
+  }
+
+  async function handleStartSession() {
+    if (!profile || !id) return;
+    setStartingSession(true);
+    try {
+      const session = await createSession(id, profile.id);
+      router.push(`/session/${session.id}`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not start session.');
+    } finally {
+      setStartingSession(false);
+    }
+  }
+
+  function handleJoinSession() {
+    if (activeSession) router.push(`/session/${activeSession.id}`);
   }
 
   if (loading) {
@@ -128,13 +153,25 @@ export default function GroupScreen() {
           );
         }}
         ListFooterComponent={
-          <View style={styles.startSessionSection}>
-            <TouchableOpacity
-              style={styles.startSessionButton}
-              onPress={() => Alert.alert('Coming soon', 'Sessions are in Step 3!')}
-            >
-              <Text style={styles.startSessionText}>💨 Start a session</Text>
-            </TouchableOpacity>
+          <View style={styles.sessionSection}>
+            {activeSession ? (
+              <TouchableOpacity style={styles.joinSessionButton} onPress={handleJoinSession}>
+                <View style={styles.liveDot} />
+                <Text style={styles.joinSessionText}>Session in progress — join</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.startSessionButton, startingSession && styles.buttonDisabled]}
+                onPress={handleStartSession}
+                disabled={startingSession}
+              >
+                {startingSession ? (
+                  <ActivityIndicator color={Colors.background} />
+                ) : (
+                  <Text style={styles.startSessionText}>💨 Start a session</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -284,7 +321,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
   },
-  startSessionSection: {
+  sessionSection: {
     marginTop: Spacing.lg,
   },
   startSessionButton: {
@@ -297,5 +334,28 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: FontSize.md,
     fontWeight: '700',
+  },
+  joinSessionButton: {
+    backgroundColor: Colors.danger,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.text,
+  },
+  joinSessionText: {
+    color: Colors.text,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
 });

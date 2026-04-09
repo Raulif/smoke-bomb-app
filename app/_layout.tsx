@@ -26,6 +26,7 @@ export default function RootLayout() {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen name="group/[id]" />
+        <Stack.Screen name="session/[id]" />
       </Stack>
     </AuthProvider>
   );
