@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth } from '../../lib/auth';
 import { getGroup, getGroupMembers, type MemberWithProfile } from '../../lib/groups';
+import { getBadgesForUsers, BADGE_META } from '../../lib/badges';
 import {
   getSession,
   getLatestSmokeBomb,
@@ -32,7 +33,7 @@ import {
 } from '../../lib/sessions';
 import { generateAvatarUrl } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
-import type { SessionRow, SmokeBombRow, GroupRow, AccusationRow } from '../../lib/types';
+import type { SessionRow, SmokeBombRow, GroupRow, AccusationRow, BadgeType } from '../../lib/types';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,11 +52,15 @@ export default function SessionScreen() {
   const [throwing, setThrowing] = useState(false);
   const [arrivingHome, setArrivingHome] = useState(false);
   const [accusations, setAccusations] = useState<AccusationRow[]>([]);
+  const [badgesMap, setBadgesMap] = useState<Map<string, BadgeType[]>>(new Map());
   const [showAccuseModal, setShowAccuseModal] = useState(false);
   const [accusingUserId, setAccusingUserId] = useState<string | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  const caughtAlertShown = useRef(false);
 
   const startTimer = useCallback((since: string) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -87,6 +92,9 @@ export default function SessionScreen() {
       ]);
       setGroup(g);
       setMembers(m);
+      if (m.length > 0) {
+        getBadgesForUsers(m.map(mem => mem.user_id)).then(setBadgesMap).catch(() => {});
+      }
 
       // Start timer only if bomb is currently active
       if (bomb?.status === 'active' && bomb.activated_at) startTimer(bomb.activated_at);
@@ -108,6 +116,14 @@ export default function SessionScreen() {
           } else {
             stopTimer();
             setElapsed(0);
+            if (
+              !caughtAlertShown.current &&
+              updatedBomb?.status === 'discovered' &&
+              updatedBomb.thrown_by === profileRef.current?.id
+            ) {
+              caughtAlertShown.current = true;
+              Alert.alert("🕵️ You've been caught!", 'Someone figured you out. Check the Smoke Trail for the full story.');
+            }
           }
         },
       );
@@ -358,7 +374,9 @@ export default function SessionScreen() {
                 ) : (
                   <Text style={styles.pointsCalculating}>Calculating points…</Text>
                 )}
-                <Text style={styles.closedSubtitle}>Check the Smoke Trail for the full recap.</Text>
+                <TouchableOpacity onPress={() => router.push(`/session/trail/${id}`)}>
+                  <Text style={styles.trailLink}>View Smoke Trail →</Text>
+                </TouchableOpacity>
               </>
             ) : smokeBomb?.status === 'discovered' ? (
               <>
@@ -385,13 +403,17 @@ export default function SessionScreen() {
                     </>
                   );
                 })()}
-                <Text style={styles.closedSubtitle}>Check the Smoke Trail for the full recap.</Text>
+                <TouchableOpacity onPress={() => router.push(`/session/trail/${id}`)}>
+                  <Text style={styles.trailLink}>View Smoke Trail →</Text>
+                </TouchableOpacity>
               </>
             ) : (
               <>
                 <Text style={styles.closedEmoji}>🏁</Text>
                 <Text style={styles.closedTitle}>Session over</Text>
-                <Text style={styles.closedSubtitle}>Check the Smoke Trail for the full recap.</Text>
+                <TouchableOpacity onPress={() => router.push(`/session/trail/${id}`)}>
+                  <Text style={styles.trailLink}>View Smoke Trail →</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -408,10 +430,17 @@ export default function SessionScreen() {
             return (
               <View key={member.id} style={[styles.playerRow, isMe && styles.playerRowMe]}>
                 <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-                <Text style={[styles.playerName, isMe && styles.playerNameMe]}>
-                  {member.users.username ?? 'Unknown'}
-                  {isMe ? ' (you)' : ''}
-                </Text>
+                <View style={styles.playerInfo}>
+                  <Text style={[styles.playerName, isMe && styles.playerNameMe]}>
+                    {member.users.username ?? 'Unknown'}
+                    {isMe ? ' (you)' : ''}
+                  </Text>
+                  {(badgesMap.get(member.user_id) ?? []).length > 0 && (
+                    <Text style={styles.badgeEmojis}>
+                      {(badgesMap.get(member.user_id) ?? []).map(b => BADGE_META[b].emoji).join(' ')}
+                    </Text>
+                  )}
+                </View>
                 {/* Only show if session is closed and thrower is revealed */}
                 {isClosed && isBomber && (
                   <Text style={styles.throwerTag}>💨 Bomber</Text>
@@ -723,14 +752,20 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: Colors.surfaceAlt,
   },
-  playerName: {
+  playerInfo: {
     flex: 1,
+  },
+  playerName: {
     fontSize: FontSize.md,
     fontWeight: '600',
     color: Colors.text,
   },
   playerNameMe: {
     color: Colors.primary,
+  },
+  badgeEmojis: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
   },
   throwerTag: {
     fontSize: FontSize.sm,
@@ -781,6 +816,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
     fontStyle: 'italic',
+    marginTop: Spacing.xs,
+  },
+  trailLink: {
+    fontSize: FontSize.sm,
+    color: Colors.primary,
+    fontWeight: '700',
     marginTop: Spacing.xs,
   },
   modalOverlay: {

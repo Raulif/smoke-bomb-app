@@ -10,6 +10,14 @@ export interface Database {
         Args: { p_session_id: string };
         Returns: Json;
       };
+      award_session_badges: {
+        Args: { p_session_id: string };
+        Returns: void;
+      };
+      award_legend_badges: {
+        Args: Record<string, never>;
+        Returns: void;
+      };
     };
     Tables: {
       users: {
@@ -19,6 +27,7 @@ export interface Database {
           avatar_url: string | null;
           phone: string | null;
           lifetime_points: number;
+          push_token: string | null;
           created_at: string;
         };
         Insert: {
@@ -27,6 +36,7 @@ export interface Database {
           avatar_url?: string | null;
           phone?: string | null;
           lifetime_points?: number;
+          push_token?: string | null;
           created_at?: string;
         };
         Update: {
@@ -35,6 +45,7 @@ export interface Database {
           avatar_url?: string | null;
           phone?: string | null;
           lifetime_points?: number;
+          push_token?: string | null;
           created_at?: string;
         };
       };

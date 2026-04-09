@@ -30,7 +30,13 @@
     "plugins": [
       "expo-secure-store",
       "expo-router",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B35"
+        }
+      ]
     ]
   }
 }

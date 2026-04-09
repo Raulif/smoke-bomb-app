@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from './supabase';
 import type { UserRow } from './types';
@@ -56,6 +58,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
     setProfile(data ?? null);
     setLoading(false);
+    if (data) registerPushToken(userId);
+  }
+
+  async function registerPushToken(userId: string): Promise<void> {
+    if (Platform.OS === 'web') return;
+    try {
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      const { status } = existing === 'granted'
+        ? { status: existing }
+        : await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') return;
+
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        (Constants as any).easConfig?.projectId;
+      if (!projectId) {
+        console.warn('No EAS project ID — push notifications require a development build with EAS.');
+        return;
+      }
+
+      const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+      await supabase.from('users').update({ push_token: token }).eq('id', userId);
+    } catch (e) {
+      console.error('Push token registration failed:', e);
+    }
   }
 
   async function signInWithPhone(phone: string) {

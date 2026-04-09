@@ -34,6 +34,13 @@ export async function createGroup(name: string, userId: string): Promise<GroupRo
 
   if (memberError) throw memberError;
 
+  // Best-effort — award Founder badge on first group creation
+  try {
+    await supabase.from('badges').insert({ user_id: userId, badge_type: 'founder' });
+  } catch {
+    // Already has the badge or insert failed — not critical
+  }
+
   return group;
 }
 

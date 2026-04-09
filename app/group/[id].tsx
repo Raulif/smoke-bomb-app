@@ -15,9 +15,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getGroup, getGroupMembers, type MemberWithProfile } from '../../lib/groups';
 import { getActiveSession, createSession } from '../../lib/sessions';
+import { getBadgesForUsers, BADGE_META } from '../../lib/badges';
 import { generateAvatarUrl } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
-import type { GroupRow, SessionRow } from '../../lib/types';
+import type { GroupRow, SessionRow, BadgeType } from '../../lib/types';
 
 export default function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,6 +26,7 @@ export default function GroupScreen() {
   const [group, setGroup] = useState<GroupRow | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [activeSession, setActiveSession] = useState<SessionRow | null>(null);
+  const [badgesMap, setBadgesMap] = useState<Map<string, BadgeType[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
@@ -40,6 +42,9 @@ export default function GroupScreen() {
       setGroup(g);
       setMembers(m);
       setActiveSession(s);
+      if (m.length > 0) {
+        getBadgesForUsers(m.map(mem => mem.user_id)).then(setBadgesMap).catch(() => {});
+      }
     } catch {
       Alert.alert('Error', 'Could not load group.');
     } finally {
@@ -147,6 +152,11 @@ export default function GroupScreen() {
                   {item.users.username ?? 'Unknown'}
                   {isMe ? ' (you)' : ''}
                 </Text>
+                {(badgesMap.get(item.user_id) ?? []).length > 0 && (
+                  <Text style={styles.badgeEmojis}>
+                    {(badgesMap.get(item.user_id) ?? []).map(b => BADGE_META[b].emoji).join(' ')}
+                  </Text>
+                )}
               </View>
               <Text style={styles.memberPoints}>{item.total_points} pts</Text>
             </View>
@@ -315,6 +325,10 @@ const styles = StyleSheet.create({
   },
   memberNameMe: {
     color: Colors.primary,
+  },
+  badgeEmojis: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
   },
   memberPoints: {
     fontSize: FontSize.md,

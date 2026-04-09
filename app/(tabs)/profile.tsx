@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,22 +10,22 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAuth, generateAvatarUrl } from '../../lib/auth';
+import { getUserBadges, BADGE_META } from '../../lib/badges';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { BadgeType } from '../../lib/types';
-
-const BADGE_META: Record<BadgeType, { emoji: string; label: string; description: string }> = {
-  ghost: { emoji: '👻', label: 'Ghost', description: 'Escaped without being caught' },
-  phantom: { emoji: '🌫️', label: 'Phantom', description: 'Escaped 3 sessions in a row' },
-  sprinter: { emoji: '⚡', label: 'Sprinter', description: 'Fastest time home in group history' },
-  bloodhound: { emoji: '🐕', label: 'Bloodhound', description: 'Made your first correct accusation' },
-  detective: { emoji: '🔍', label: 'Detective', description: '5 correct accusations' },
-  founder: { emoji: '🏛️', label: 'Founder', description: 'Created a group' },
-  legend: { emoji: '👑', label: 'Legend', description: 'Top of leaderboard for a full month' },
-};
 
 export default function ProfileScreen() {
   const { profile, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [earnedBadges, setEarnedBadges] = useState<Set<BadgeType>>(new Set());
+
+  useEffect(() => {
+    if (profile?.id) {
+      getUserBadges(profile.id).then(rows => {
+        setEarnedBadges(new Set(rows.map(r => r.badge_type)));
+      }).catch(() => {});
+    }
+  }, [profile?.id]);
 
   const avatarUrl = profile?.avatar_url ?? generateAvatarUrl(profile?.id ?? 'default');
 
@@ -65,7 +65,7 @@ export default function ProfileScreen() {
         <View style={styles.badgesGrid}>
           {(Object.keys(BADGE_META) as BadgeType[]).map(type => {
             const meta = BADGE_META[type];
-            const earned = false; // Will be populated in Step 8
+            const earned = earnedBadges.has(type);
             return (
               <View key={type} style={[styles.badgeItem, !earned && styles.badgeLocked]}>
                 <Text style={[styles.badgeEmoji, !earned && styles.badgeEmojiLocked]}>

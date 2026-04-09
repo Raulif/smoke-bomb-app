@@ -44,11 +44,16 @@ export async function arriveHome(smokeBombId: string, sessionId: string): Promis
 
   if (error) throw error;
   await closeSession(sessionId);
-  // Best-effort — session close is the critical action; real-time delivers points to all players
+  // Best-effort — session close is the critical action; real-time delivers results to all players
   try {
     await calculateSessionPoints(sessionId);
   } catch (e) {
     console.error('Points calculation failed:', e);
+  }
+  try {
+    await awardSessionBadges(sessionId);
+  } catch (e) {
+    console.error('Badge award failed:', e);
   }
 }
 
@@ -56,6 +61,13 @@ export async function arriveHome(smokeBombId: string, sessionId: string): Promis
 // Idempotent — safe to call multiple times.
 export async function calculateSessionPoints(sessionId: string): Promise<void> {
   const { error } = await supabase.rpc('calculate_session_points', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
+}
+
+export async function awardSessionBadges(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('award_session_badges', {
     p_session_id: sessionId,
   });
   if (error) throw error;
@@ -230,6 +242,20 @@ export async function makeAccusation(
       await calculateSessionPoints(sessionId);
     } catch (e) {
       console.error('Points calculation failed:', e);
+    }
+    try {
+      await awardSessionBadges(sessionId);
+    } catch (e) {
+      console.error('Badge award failed:', e);
+    }
+
+    // Best-effort — notify the thrower via push notification
+    try {
+      await supabase.functions.invoke('notify-caught', {
+        body: { thrower_id: thrownBy, catcher_id: accusedBy },
+      });
+    } catch (e) {
+      console.error('Caught notification failed:', e);
     }
 
     return { isCorrect: true, caughtMessage: bomb?.caught_message ?? null };
