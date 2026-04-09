@@ -36,6 +36,13 @@
         {
           "color": "#FF6B35"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Smoke Bomb uses your location to detect when you arrive home during an active game.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
       ]
     ]
   }
