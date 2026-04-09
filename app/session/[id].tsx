@@ -32,6 +32,7 @@ import {
   elapsedSeconds,
 } from '../../lib/sessions';
 import { generateAvatarUrl } from '../../lib/auth';
+import { useHomeDetection } from '../../lib/useHomeDetection';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { SessionRow, SmokeBombRow, GroupRow, AccusationRow, BadgeType } from '../../lib/types';
 
@@ -61,6 +62,20 @@ export default function SessionScreen() {
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
   const caughtAlertShown = useRef(false);
+
+  const isActiveThrowee =
+    smokeBomb?.status === 'active' && smokeBomb.thrown_by === profile?.id && session?.status === 'active';
+
+  const { tracking: gpsTracking, permissionDenied: gpsPermissionDenied } = useHomeDetection({
+    enabled: isActiveThrowee ?? false,
+    smokeBombId: smokeBomb?.id ?? null,
+    sessionId: session?.id ?? null,
+    homeLatitude: profile?.home_latitude ?? null,
+    homeLongitude: profile?.home_longitude ?? null,
+    onArrived: async () => {
+      if (smokeBomb && session) await arriveHome(smokeBomb.id, session.id);
+    },
+  });
 
   const startTimer = useCallback((since: string) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -340,17 +355,26 @@ export default function SessionScreen() {
 
         {/* I'm home — only visible to the thrower while bomb is active */}
         {!isClosed && hasBomb && isThrower && (
-          <TouchableOpacity
-            style={styles.homeButton}
-            onPress={handleArriveHome}
-            disabled={arrivingHome}
-          >
-            {arrivingHome ? (
-              <ActivityIndicator color={Colors.background} />
-            ) : (
-              <Text style={styles.homeButtonText}>🏠  I'm home!</Text>
-            )}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.homeButton}
+              onPress={handleArriveHome}
+              disabled={arrivingHome}
+            >
+              {arrivingHome ? (
+                <ActivityIndicator color={Colors.background} />
+              ) : (
+                <Text style={styles.homeButtonText}>🏠  I'm home!</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.gpsStatus}>
+              {gpsTracking
+                ? '📍 GPS auto-detection active'
+                : gpsPermissionDenied || profile?.home_latitude == null
+                ? 'Set a home address in your profile to enable GPS auto-detection'
+                : 'Starting GPS detection…'}
+            </Text>
+          </>
         )}
 
         {isClosed && (
@@ -792,6 +816,12 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: FontSize.lg,
     fontWeight: '800',
+  },
+  gpsStatus: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: -Spacing.xs,
   },
   victoryMessage: {
     fontSize: FontSize.md,
