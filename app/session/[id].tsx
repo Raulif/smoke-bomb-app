@@ -23,6 +23,8 @@ import {
   throwSmokeBomb,
   arriveHome,
   closeSession,
+  makeAccusation,
+  getAccusations,
   subscribeToSession,
   unsubscribe,
   formatDuration,
@@ -30,7 +32,7 @@ import {
 } from '../../lib/sessions';
 import { generateAvatarUrl } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
-import type { SessionRow, SmokeBombRow, GroupRow } from '../../lib/types';
+import type { SessionRow, SmokeBombRow, GroupRow, AccusationRow } from '../../lib/types';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -48,6 +50,9 @@ export default function SessionScreen() {
   const [caughtMsg, setCaughtMsg] = useState('');
   const [throwing, setThrowing] = useState(false);
   const [arrivingHome, setArrivingHome] = useState(false);
+  const [accusations, setAccusations] = useState<AccusationRow[]>([]);
+  const [showAccuseModal, setShowAccuseModal] = useState(false);
+  const [accusingUserId, setAccusingUserId] = useState<string | null>(null);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -122,6 +127,13 @@ export default function SessionScreen() {
     };
   }, [load, stopTimer]);
 
+  // Load accusations whenever we have a smoke bomb (active or closed session)
+  useEffect(() => {
+    if (smokeBomb?.id) {
+      getAccusations(smokeBomb.id).then(setAccusations).catch(() => {});
+    }
+  }, [smokeBomb?.id]);
+
   async function handleThrowSmokeBomb() {
     if (!session || !profile) return;
     setThrowing(true);
@@ -159,6 +171,55 @@ export default function SessionScreen() {
         },
       ],
     );
+  }
+
+  function handleAccuseTap(target: MemberWithProfile) {
+    if (!smokeBomb || smokeBomb.status !== 'active') {
+      Alert.alert('No active smoke bomb', "Nobody has snuck out yet. 🤫");
+      return;
+    }
+    Alert.alert(
+      `Accuse ${target.users.username}?`,
+      "Wrong accusation costs you 5 points.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Point the finger!',
+          style: 'destructive',
+          onPress: () => submitAccusation(target),
+        },
+      ],
+    );
+  }
+
+  async function submitAccusation(target: MemberWithProfile) {
+    if (!smokeBomb || !session || !profile) return;
+    setAccusingUserId(target.user_id);
+    try {
+      const { isCorrect, caughtMessage } = await makeAccusation(
+        smokeBomb.id,
+        session.id,
+        profile.id,
+        target.user_id,
+        smokeBomb.thrown_by,
+      );
+      setShowAccuseModal(false);
+      if (isCorrect) {
+        const body = caughtMessage
+          ? `They left you a message:\n\n"${caughtMessage}"`
+          : 'You busted them!';
+        Alert.alert(`🕵️ Caught! It was ${target.users.username}.`, body);
+      } else {
+        Alert.alert('Wrong! 🤦', `${target.users.username} didn't sneak out. -5 points.`);
+        // Refresh list so "Already accused" label appears immediately
+        const updated = await getAccusations(smokeBomb.id);
+        setAccusations(updated);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not submit accusation.');
+    } finally {
+      setAccusingUserId(null);
+    }
   }
 
   async function handleCloseSession() {
@@ -305,6 +366,25 @@ export default function SessionScreen() {
                 <Text style={styles.closedTitle}>
                   {bomber?.users.username ?? 'Someone'} was caught!
                 </Text>
+                {(() => {
+                  const hit = accusations.find(a => a.correct === true);
+                  const catcher = hit ? members.find(m => m.user_id === hit.accused_by) : null;
+                  const wasMe = hit?.accused_by === profile?.id;
+                  return (
+                    <>
+                      {catcher && (
+                        <Text style={styles.closedSubtitle}>
+                          Busted by {wasMe ? 'you' : catcher.users.username}!
+                        </Text>
+                      )}
+                      {wasMe && hit?.points_earned != null && (
+                        <View style={styles.pointsBadge}>
+                          <Text style={styles.pointsText}>+{hit.points_earned} pts</Text>
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
                 <Text style={styles.closedSubtitle}>Check the Smoke Trail for the full recap.</Text>
               </>
             ) : (
@@ -341,6 +421,16 @@ export default function SessionScreen() {
           })}
         </View>
 
+        {/* Accuse — visible to non-throwers during an active session */}
+        {!isClosed && !isThrower && (
+          <TouchableOpacity
+            style={styles.accuseButton}
+            onPress={() => setShowAccuseModal(true)}
+          >
+            <Text style={styles.accuseButtonText}>🫵 Point the finger</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Throw smoke bomb — hidden only from the active thrower */}
         {!isClosed && !isThrower && (
           <TouchableOpacity
@@ -351,6 +441,62 @@ export default function SessionScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Accuse modal */}
+      <Modal visible={showAccuseModal} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          onPress={() => !accusingUserId && setShowAccuseModal(false)}
+          activeOpacity={1}
+        />
+        <View style={styles.modalKeyboard} pointerEvents="box-none">
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>👀 Who snuck out?</Text>
+            <Text style={styles.modalSubtitle}>
+              Wrong accusation costs 5 points. Choose wisely.
+            </Text>
+            {members
+              .filter(m => m.user_id !== profile?.id)
+              .map(member => {
+                const alreadyAccused = accusations.some(
+                  a => a.accused_by === profile?.id && a.accused_user_id === member.user_id,
+                );
+                const avatarUrl = member.users.avatar_url ?? generateAvatarUrl(member.user_id);
+                return (
+                  <TouchableOpacity
+                    key={member.id}
+                    style={[styles.accusePlayerRow, alreadyAccused && styles.accusePlayerRowDim]}
+                    onPress={() => {
+                      setShowAccuseModal(false);
+                      handleAccuseTap(member);
+                    }}
+                    disabled={alreadyAccused || !!accusingUserId}
+                    activeOpacity={0.7}
+                  >
+                    <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                    <Text style={[styles.playerName, alreadyAccused && styles.playerNameDim]}>
+                      {member.users.username ?? 'Unknown'}
+                    </Text>
+                    {accusingUserId === member.user_id ? (
+                      <ActivityIndicator color={Colors.primary} size="small" />
+                    ) : alreadyAccused ? (
+                      <Text style={styles.accusedLabel}>Already accused</Text>
+                    ) : (
+                      <Text style={styles.accuseChevron}>›</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowAccuseModal(false)}
+              disabled={!!accusingUserId}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Throw smoke bomb modal */}
       <Modal visible={showThrowModal} transparent animationType="slide">
@@ -710,5 +856,43 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: FontSize.md,
     fontWeight: '800',
+  },
+  accuseButton: {
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.textSecondary,
+  },
+  accuseButtonText: {
+    color: Colors.text,
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+  },
+  accusePlayerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  accusePlayerRowDim: {
+    opacity: 0.45,
+  },
+  playerNameDim: {
+    color: Colors.textTertiary,
+  },
+  accusedLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+    fontStyle: 'italic',
+  },
+  accuseChevron: {
+    fontSize: FontSize.xl,
+    color: Colors.textSecondary,
+    fontWeight: '300',
   },
 });

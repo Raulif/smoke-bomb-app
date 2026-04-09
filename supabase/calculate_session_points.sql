@@ -4,7 +4,7 @@
 -- Points formula (per CLAUDE.md):
 --   Thrower (escaped) : 10 base + 3 per minute, capped at 100
 --   Thrower (caught)  : 0
---   Correct accuser   : max(5, 20 − minutes since bomb activated)
+--   Correct accuser   : max(5, 100 − minutes since bomb activated)
 --   Wrong accuser     : −5 (group total floored at 0)
 --   Wrongly accused   : +3 compensation per wrong accusation
 
@@ -94,7 +94,7 @@ BEGIN
       v_accuse_elapsed := EXTRACT(EPOCH FROM (
         v_accuser.accused_at::timestamptz - v_bomb.activated_at::timestamptz
       ))::integer;
-      -- Speed bonus: 20 base − 1 per minute, floor at 5
+      -- Speed bonus: 100 base − 1 per minute, floor at 5
       v_accuse_pts := GREATEST(5, 100 - (v_accuse_elapsed / 60));
 
       UPDATE accusations SET points_earned = v_accuse_pts WHERE id = v_accuser.id;

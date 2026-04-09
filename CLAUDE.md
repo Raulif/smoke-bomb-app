@@ -117,7 +117,7 @@ All of the following must sync instantly across all players via **Supabase real-
 - [x] Step 2 — Group creation and joining
 - [x] Step 3 — Session management
 - [x] Step 4 — Smoke bomb mechanic and timer
-- [ ] Step 5 — Points system
-- [ ] Step 6 — Accusations mechanic
+- [x] Step 5 — Points system
+- [x] Step 6 — Accusations mechanic
 - [ ] Step 7 — Smoke Trail
 - [ ] Step 8 — Badges and reputation system

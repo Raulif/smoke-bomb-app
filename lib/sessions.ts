@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { SessionRow, SmokeBombRow } from './types';
+import type { SessionRow, SmokeBombRow, AccusationRow } from './types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export type SessionWithSmokeBomb = SessionRow & {
@@ -183,6 +183,69 @@ export function subscribeToSession(
 
 export function unsubscribe(channel: RealtimeChannel): void {
   supabase.removeChannel(channel);
+}
+
+/**
+ * Submit an accusation. Correctness is resolved immediately by comparing
+ * accused_user_id to the bomb's thrown_by. A correct accusation marks the bomb
+ * as 'discovered', closes the session, and triggers points calculation.
+ */
+export async function makeAccusation(
+  smokeBombId: string,
+  sessionId: string,
+  accusedBy: string,
+  accusedUserId: string,
+  thrownBy: string,
+): Promise<{ isCorrect: boolean; caughtMessage: string | null }> {
+  const isCorrect = accusedUserId === thrownBy;
+
+  const { error } = await supabase
+    .from('accusations')
+    .insert({
+      smoke_bomb_id: smokeBombId,
+      accused_by: accusedBy,
+      accused_user_id: accusedUserId,
+      correct: isCorrect,
+    });
+
+  if (error) throw error;
+
+  if (isCorrect) {
+    const { data: bomb } = await supabase
+      .from('smoke_bombs')
+      .select('caught_message')
+      .eq('id', smokeBombId)
+      .single();
+
+    const { error: bombErr } = await supabase
+      .from('smoke_bombs')
+      .update({ status: 'discovered' })
+      .eq('id', smokeBombId);
+
+    if (bombErr) throw bombErr;
+
+    await closeSession(sessionId);
+
+    try {
+      await calculateSessionPoints(sessionId);
+    } catch (e) {
+      console.error('Points calculation failed:', e);
+    }
+
+    return { isCorrect: true, caughtMessage: bomb?.caught_message ?? null };
+  }
+
+  return { isCorrect: false, caughtMessage: null };
+}
+
+/** Fetch all accusations for a smoke bomb, ordered by time. */
+export async function getAccusations(smokeBombId: string): Promise<AccusationRow[]> {
+  const { data } = await supabase
+    .from('accusations')
+    .select('*')
+    .eq('smoke_bomb_id', smokeBombId)
+    .order('accused_at', { ascending: true });
+  return data ?? [];
 }
 
 // Formats elapsed seconds into mm:ss
