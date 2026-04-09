@@ -2,15 +2,16 @@
   "expo": {
     "name": "smoke-bomb-app",
     "slug": "smoke-bomb-app",
+    "scheme": "smokebomb",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0D0D0D"
     },
     "ios": {
       "supportsTablet": true
@@ -28,7 +29,8 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-router"
+      "expo-router",
+      "expo-apple-authentication"
     ]
   }
 }
