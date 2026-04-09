@@ -23,6 +23,9 @@ importers:
       expo-image-picker:
         specifier: ~55.0.17
         version: 55.0.17(expo@55.0.12)
+      expo-location:
+        specifier: ~18.1.6
+        version: 18.1.6(expo@55.0.12)
       expo-notifications:
         specifier: ~55.0.17
         version: 55.0.17(expo@55.0.12)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
@@ -1729,6 +1732,11 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  expo-location@18.1.6:
+    resolution: {integrity: sha512-l5dQQ2FYkrBgNzaZN1BvSmdhhcztFOUucu2kEfDBMV4wSIuTIt/CKsho+F3RnAiWgvui1wb1WTTf80E8zq48hA==}
+    peerDependencies:
+      expo: '*'
 
   expo-modules-autolinking@55.0.15:
     resolution: {integrity: sha512-89WNHlSo+hmH8O7sEHDgOpb3MyHON/NmDIl+LiEGMiHHHSrSbU10DSglYWKUk68yjQebxkmfzXcEghbous3LcA==}
@@ -5156,6 +5164,10 @@ snapshots:
       - expo
       - supports-color
       - typescript
+
+  expo-location@18.1.6(expo@55.0.12):
+    dependencies:
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.11)(react-dom@19.2.4(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
 
   expo-modules-autolinking@55.0.15(typescript@5.9.3):
     dependencies:

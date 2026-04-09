@@ -8,16 +8,20 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useAuth, generateAvatarUrl } from '../../lib/auth';
 import { getUserBadges, BADGE_META } from '../../lib/badges';
+import { geocodeAddress, saveHomeLocation } from '../../lib/location';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { BadgeType } from '../../lib/types';
 
 export default function ProfileScreen() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [earnedBadges, setEarnedBadges] = useState<Set<BadgeType>>(new Set());
+  const [homeAddress, setHomeAddress] = useState('');
+  const [savingHome, setSavingHome] = useState(false);
 
   useEffect(() => {
     if (profile?.id) {
@@ -46,6 +50,26 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  }
+
+  async function handleSaveHome() {
+    if (!profile || !homeAddress.trim()) return;
+    setSavingHome(true);
+    try {
+      const coords = await geocodeAddress(homeAddress.trim());
+      if (!coords) {
+        Alert.alert('Address not found', 'Could not find that address. Try being more specific.');
+        return;
+      }
+      await saveHomeLocation(profile.id, coords.latitude, coords.longitude);
+      await refreshProfile();
+      setHomeAddress('');
+      Alert.alert('Home saved', 'GPS auto-detection is now active when you throw a smoke bomb.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not save home address.');
+    } finally {
+      setSavingHome(false);
+    }
   }
 
   return (
@@ -78,6 +102,38 @@ export default function ProfileScreen() {
             );
           })}
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Home address</Text>
+        <Text style={styles.sectionSubtitle}>
+          {profile?.home_latitude != null
+            ? 'Home is set — GPS auto-detection active'
+            : 'Set your home address to enable GPS auto-detection'}
+        </Text>
+        {profile?.home_latitude != null && (
+          <Text style={styles.homeSetLabel}>Home set</Text>
+        )}
+        <TextInput
+          style={styles.addressInput}
+          placeholder="Enter your home address"
+          placeholderTextColor={Colors.textSecondary}
+          value={homeAddress}
+          onChangeText={setHomeAddress}
+          returnKeyType="done"
+          onSubmitEditing={handleSaveHome}
+        />
+        <TouchableOpacity
+          style={[styles.saveHomeButton, savingHome && styles.buttonDisabled]}
+          onPress={handleSaveHome}
+          disabled={savingHome || !homeAddress.trim()}
+        >
+          {savingHome ? (
+            <ActivityIndicator color={Colors.primary} size="small" />
+          ) : (
+            <Text style={styles.saveHomeText}>Save home</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -188,6 +244,33 @@ const styles = StyleSheet.create({
   },
   badgeLabelLocked: {
     color: Colors.textSecondary,
+  },
+  homeSetLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  addressInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  saveHomeButton: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  saveHomeText: {
+    color: Colors.primary,
+    fontSize: FontSize.md,
+    fontWeight: '600',
   },
   signOutButton: {
     borderRadius: Radius.md,

@@ -29,6 +29,8 @@ export interface Database {
           lifetime_points: number;
           push_token: string | null;
           created_at: string;
+          home_latitude: number | null;
+          home_longitude: number | null;
         };
         Insert: {
           id: string;
@@ -38,6 +40,8 @@ export interface Database {
           lifetime_points?: number;
           push_token?: string | null;
           created_at?: string;
+          home_latitude?: number | null;
+          home_longitude?: number | null;
         };
         Update: {
           id?: string;
@@ -47,6 +51,8 @@ export interface Database {
           lifetime_points?: number;
           push_token?: string | null;
           created_at?: string;
+          home_latitude?: number | null;
+          home_longitude?: number | null;
         };
       };
       groups: {
