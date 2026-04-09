@@ -2,6 +2,15 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export interface Database {
   public: {
+    Views: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+    Functions: {
+      calculate_session_points: {
+        Args: { p_session_id: string };
+        Returns: Json;
+      };
+    };
     Tables: {
       users: {
         Row: {

@@ -44,6 +44,21 @@ export async function arriveHome(smokeBombId: string, sessionId: string): Promis
 
   if (error) throw error;
   await closeSession(sessionId);
+  // Best-effort — session close is the critical action; real-time delivers points to all players
+  try {
+    await calculateSessionPoints(sessionId);
+  } catch (e) {
+    console.error('Points calculation failed:', e);
+  }
+}
+
+// Calls the DB function that calculates and writes all points for a closed session.
+// Idempotent — safe to call multiple times.
+export async function calculateSessionPoints(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('calculate_session_points', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
 }
 
 export async function getLatestSmokeBomb(sessionId: string): Promise<SmokeBombRow | null> {

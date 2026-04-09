@@ -287,6 +287,16 @@ export default function SessionScreen() {
                 {smokeBomb.victory_message ? (
                   <Text style={styles.victoryMessage}>"{smokeBomb.victory_message}"</Text>
                 ) : null}
+                {smokeBomb.points_earned !== null && smokeBomb.points_earned !== undefined ? (
+                  <View style={styles.pointsBadge}>
+                    <Text style={styles.pointsText}>
+                      {smokeBomb.thrown_by === profile?.id ? 'You earned ' : ''}
+                      +{smokeBomb.points_earned} pts
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.pointsCalculating}>Calculating points…</Text>
+                )}
                 <Text style={styles.closedSubtitle}>Check the Smoke Trail for the full recap.</Text>
               </>
             ) : smokeBomb?.status === 'discovered' ? (
@@ -608,6 +618,24 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingHorizontal: Spacing.sm,
+  },
+  pointsBadge: {
+    backgroundColor: Colors.success,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  pointsText: {
+    color: Colors.background,
+    fontSize: FontSize.md,
+    fontWeight: '800',
+  },
+  pointsCalculating: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: Spacing.xs,
   },
   modalOverlay: {
     ...StyleSheet.absoluteFillObject,
