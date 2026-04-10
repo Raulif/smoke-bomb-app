@@ -4,7 +4,15 @@
       "Skill(claude-api)",
       "Skill(claude-api:*)",
       "Bash(supabase --version)",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Bash(grep -n \"trail\\\\|getLatestSmokeBomb\\\\|getAccusations\" /Users/rauliglesias/dev/smoke-bomb-app/app/session/[id].tsx)",
+      "Bash(grep -i \"trail\" /Users/rauliglesias/dev/smoke-bomb-app/app/session/[id].tsx)",
+      "Bash(head:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(xargs ls:*)"
     ]
   }
 }
