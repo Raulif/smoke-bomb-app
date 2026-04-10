@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getUserGroups, type GroupWithMeta } from '../../lib/groups';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
+import { LivePill } from '../../components/LivePill';
 
 export default function HomeScreen() {
   const { profile } = useAuth();
@@ -85,11 +86,7 @@ export default function HomeScreen() {
             <View style={styles.groupCardLeft}>
               <View style={styles.groupNameRow}>
                 <Text style={styles.groupName}>{item.name}</Text>
-                {item.has_active_session && (
-                  <View style={styles.activePill}>
-                    <Text style={styles.activePillText}>LIVE</Text>
-                  </View>
-                )}
+                {item.has_active_session && <LivePill />}
               </View>
               <Text style={styles.groupMeta}>
                 {item.member_count} {item.member_count === 1 ? 'member' : 'members'}
@@ -200,18 +197,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: '700',
     color: Colors.text,
-  },
-  activePill: {
-    backgroundColor: Colors.danger,
-    borderRadius: Radius.full,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  activePillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.5,
   },
   groupMeta: {
     fontSize: FontSize.xs,

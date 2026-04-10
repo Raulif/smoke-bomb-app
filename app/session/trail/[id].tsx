@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Animated,
+  Easing,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../../lib/auth';
@@ -33,7 +35,6 @@ type TrailEvent = {
   targetName: string | null;
   pointsEarned: number | null;
   victoryMessage: string | null;
-  // Only set on accusation_correct — the private message from the thrower to their catcher
   caughtMessage: string | null;
   accusedById: string | null;
 };
@@ -54,7 +55,6 @@ function buildTimeline(
   members: MemberWithProfile[],
 ): TrailEvent[] {
   const events: TrailEvent[] = [];
-
   const findMember = (userId: string) => members.find(m => m.user_id === userId);
 
   events.push({
@@ -72,7 +72,6 @@ function buildTimeline(
 
   if (smokeBomb) {
     const thrower = findMember(smokeBomb.thrown_by);
-
     events.push({
       id: `bomb_${smokeBomb.id}`,
       timestamp: smokeBomb.activated_at,
@@ -135,7 +134,6 @@ function buildTimeline(
   }
 
   events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
   return events;
 }
 
@@ -143,38 +141,105 @@ const EVENT_CONFIG: Record<
   TrailEventType,
   { emoji: string; dotColor: string; label: (e: TrailEvent) => string }
 > = {
-  session_start: {
-    emoji: '🌃',
-    dotColor: Colors.textSecondary,
-    label: () => 'Session started',
-  },
-  bomb_thrown: {
-    emoji: '💨',
-    dotColor: Colors.primary,
-    label: e => `${e.actorName} threw a smoke bomb`,
-  },
-  accusation_wrong: {
-    emoji: '❌',
-    dotColor: Colors.danger,
-    label: e => `${e.actorName} accused ${e.targetName} — wrong!`,
-  },
-  accusation_correct: {
-    emoji: '🕵️',
-    dotColor: Colors.success,
-    label: e => `${e.actorName} caught ${e.targetName}!`,
-  },
-  home: {
-    emoji: '🏠',
-    dotColor: Colors.success,
-    label: e => `${e.actorName} made it home!`,
-  },
-  session_end: {
-    emoji: '🏁',
-    dotColor: Colors.textSecondary,
-    label: () => 'Session ended',
-  },
+  session_start:      { emoji: '🌃', dotColor: Colors.textSecondary, label: () => 'Session started' },
+  bomb_thrown:        { emoji: '💨', dotColor: Colors.primary,       label: e => `${e.actorName} threw a smoke bomb` },
+  accusation_wrong:   { emoji: '❌', dotColor: Colors.danger,        label: e => `${e.actorName} accused ${e.targetName} — wrong!` },
+  accusation_correct: { emoji: '🕵️', dotColor: Colors.success,      label: e => `${e.actorName} caught ${e.targetName}!` },
+  home:               { emoji: '🏠', dotColor: Colors.success,       label: e => `${e.actorName} made it home!` },
+  session_end:        { emoji: '🏁', dotColor: Colors.textSecondary, label: () => 'Session ended' },
 };
 
+// ─── Animated trail event row ─────────────────────────────────────────────────
+type TrailEventItemProps = {
+  event: TrailEvent;
+  index: number;
+  isLast: boolean;
+  isMe: boolean;
+};
+
+function TrailEventItem({ event, index, isLast, isMe }: TrailEventItemProps) {
+  const config = EVENT_CONFIG[event.type];
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-20)).current;
+
+  useEffect(() => {
+    const delay = index * 80;
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 350,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim, index]);
+
+  return (
+    <Animated.View
+      style={[styles.eventRow, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}
+    >
+      {/* Timeline spine */}
+      <View style={styles.spine}>
+        <View style={[styles.dot, { backgroundColor: config.dotColor }]} />
+        {!isLast && <View style={styles.line} />}
+      </View>
+
+      {/* Event content */}
+      <View style={[styles.eventCard, isLast && styles.eventCardLast]}>
+        <View style={styles.eventTop}>
+          <Text style={styles.eventEmoji}>{config.emoji}</Text>
+          <View style={styles.eventMeta}>
+            <Text style={styles.eventLabel}>{config.label(event)}</Text>
+            <Text style={styles.eventTime}>{formatTime(event.timestamp)}</Text>
+          </View>
+          {event.actorAvatar &&
+            (event.type === 'bomb_thrown' ||
+              event.type === 'home' ||
+              event.type === 'accusation_correct' ||
+              event.type === 'accusation_wrong') && (
+            <Image
+              source={{ uri: event.actorAvatar }}
+              style={[styles.avatar, isMe && styles.avatarMe]}
+            />
+          )}
+        </View>
+
+        {event.type === 'home' && event.victoryMessage ? (
+          <Text style={styles.victoryMessage}>"{event.victoryMessage}"</Text>
+        ) : null}
+
+        {event.type === 'accusation_correct' && event.caughtMessage && isMe ? (
+          <View style={styles.caughtMessageBox}>
+            <Text style={styles.caughtMessageLabel}>Their message to you</Text>
+            <Text style={styles.caughtMessageText}>"{event.caughtMessage}"</Text>
+          </View>
+        ) : null}
+
+        {event.pointsEarned != null && (
+          <View style={[
+            styles.pointsBadge,
+            event.type === 'accusation_wrong' && styles.pointsBadgeNegative,
+          ]}>
+            <Text style={styles.pointsText}>
+              {event.type === 'accusation_wrong' ? '−' : '+'}
+              {Math.abs(event.pointsEarned)} pts
+            </Text>
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function SmokeTrailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
@@ -197,7 +262,6 @@ export default function SmokeTrailScreen() {
       ]);
 
       const accusations = smokeBomb ? await getAccusations(smokeBomb.id) : [];
-
       setGroupName(group?.name ?? null);
       setTimeline(buildTimeline(session, smokeBomb, accusations, members));
     } catch {
@@ -227,72 +291,25 @@ export default function SmokeTrailScreen() {
           <Text style={styles.title}>Smoke Trail</Text>
           {groupName ? <Text style={styles.subtitle}>{groupName}</Text> : null}
         </View>
-        {/* spacer to balance back button */}
         <View style={styles.backButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {timeline.map((event, index) => {
-          const config = EVENT_CONFIG[event.type];
           const isLast = index === timeline.length - 1;
-          const isMe = profile && (
+          const isMe = !!profile && (
             (event.type === 'bomb_thrown' || event.type === 'home') &&
             event.actorName === profile.username
-          );
+          ) || profile?.id === event.accusedById;
 
           return (
-            <View key={event.id} style={styles.eventRow}>
-              {/* Timeline spine */}
-              <View style={styles.spine}>
-                <View style={[styles.dot, { backgroundColor: config.dotColor }]} />
-                {!isLast && <View style={styles.line} />}
-              </View>
-
-              {/* Event content */}
-              <View style={[styles.eventCard, isLast && styles.eventCardLast]}>
-                <View style={styles.eventTop}>
-                  <Text style={styles.eventEmoji}>{config.emoji}</Text>
-                  <View style={styles.eventMeta}>
-                    <Text style={styles.eventLabel}>{config.label(event)}</Text>
-                    <Text style={styles.eventTime}>{formatTime(event.timestamp)}</Text>
-                  </View>
-                  {event.actorAvatar && (event.type === 'bomb_thrown' || event.type === 'home' || event.type === 'accusation_correct' || event.type === 'accusation_wrong') && (
-                    <Image
-                      source={{ uri: event.actorAvatar }}
-                      style={[styles.avatar, isMe && styles.avatarMe]}
-                    />
-                  )}
-                </View>
-
-                {/* Victory message — only shown on 'home' events */}
-                {event.type === 'home' && event.victoryMessage ? (
-                  <Text style={styles.victoryMessage}>"{event.victoryMessage}"</Text>
-                ) : null}
-
-                {/* Caught message — only shown to the correct accuser */}
-                {event.type === 'accusation_correct' &&
-                  event.caughtMessage &&
-                  profile?.id === event.accusedById ? (
-                  <View style={styles.caughtMessageBox}>
-                    <Text style={styles.caughtMessageLabel}>Their message to you</Text>
-                    <Text style={styles.caughtMessageText}>"{event.caughtMessage}"</Text>
-                  </View>
-                ) : null}
-
-                {/* Points badge */}
-                {event.pointsEarned != null && (
-                  <View style={[
-                    styles.pointsBadge,
-                    event.type === 'accusation_wrong' && styles.pointsBadgeNegative,
-                  ]}>
-                    <Text style={styles.pointsText}>
-                      {event.type === 'accusation_wrong' ? '−' : '+'}
-                      {Math.abs(event.pointsEarned)} pts
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
+            <TrailEventItem
+              key={event.id}
+              event={event}
+              index={index}
+              isLast={isLast}
+              isMe={isMe}
+            />
           );
         })}
       </ScrollView>

@@ -15,6 +15,7 @@ import { getUserBadges, BADGE_META } from '../../lib/badges';
 import { geocodeAddress, saveHomeLocation } from '../../lib/location';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { BadgeType } from '../../lib/types';
+import { BadgeItem } from '../../components/BadgeItem';
 
 export default function ProfileScreen() {
   const { profile, signOut, refreshProfile } = useAuth();
@@ -87,18 +88,17 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Badges</Text>
         <Text style={styles.sectionSubtitle}>Earn badges by playing</Text>
         <View style={styles.badgesGrid}>
-          {(Object.keys(BADGE_META) as BadgeType[]).map(type => {
+          {(Object.keys(BADGE_META) as BadgeType[]).map((type, index) => {
             const meta = BADGE_META[type];
             const earned = earnedBadges.has(type);
             return (
-              <View key={type} style={[styles.badgeItem, !earned && styles.badgeLocked]}>
-                <Text style={[styles.badgeEmoji, !earned && styles.badgeEmojiLocked]}>
-                  {meta.emoji}
-                </Text>
-                <Text style={[styles.badgeLabel, !earned && styles.badgeLabelLocked]}>
-                  {meta.label}
-                </Text>
-              </View>
+              <BadgeItem
+                key={type}
+                emoji={meta.emoji}
+                label={meta.label}
+                earned={earned}
+                index={index}
+              />
             );
           })}
         </View>
@@ -216,34 +216,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.sm,
     marginTop: Spacing.xs,
-  },
-  badgeItem: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    width: '30%',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  badgeLocked: {
-    opacity: 0.3,
-  },
-  badgeEmoji: {
-    fontSize: 28,
-  },
-  badgeEmojiLocked: {
-    // grayscale handled by opacity on parent
-  },
-  badgeLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.text,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  badgeLabelLocked: {
-    color: Colors.textSecondary,
   },
   homeSetLabel: {
     fontSize: FontSize.sm,

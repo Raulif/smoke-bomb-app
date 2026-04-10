@@ -19,6 +19,7 @@ import { getBadgesForUsers, BADGE_META } from '../../lib/badges';
 import { generateAvatarUrl } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { GroupRow, SessionRow, BadgeType } from '../../lib/types';
+import { LiveDot } from '../../components/LiveDot';
 
 export default function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -166,7 +167,7 @@ export default function GroupScreen() {
           <View style={styles.sessionSection}>
             {activeSession ? (
               <TouchableOpacity style={styles.joinSessionButton} onPress={handleJoinSession}>
-                <View style={styles.liveDot} />
+                <LiveDot />
                 <Text style={styles.joinSessionText}>Session in progress — join</Text>
               </TouchableOpacity>
             ) : (
@@ -357,12 +358,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: Spacing.sm,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.text,
   },
   joinSessionText: {
     color: Colors.text,

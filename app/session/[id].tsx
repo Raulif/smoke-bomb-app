@@ -12,6 +12,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -35,6 +37,7 @@ import { generateAvatarUrl } from '../../lib/auth';
 import { useHomeDetection } from '../../lib/useHomeDetection';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 import type { SessionRow, SmokeBombRow, GroupRow, AccusationRow, BadgeType } from '../../lib/types';
+import { LiveDot } from '../../components/LiveDot';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -62,6 +65,106 @@ export default function SessionScreen() {
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
   const caughtAlertShown = useRef(false);
+
+  // ─── Animation values ─────────────────────────────────────────────────────
+  const bombCardOpacity  = useRef(new Animated.Value(1)).current;
+  const bombCardShake    = useRef(new Animated.Value(0)).current;
+  const bombEmojiScale   = useRef(new Animated.Value(1)).current;
+  const timerPulse       = useRef(new Animated.Value(0)).current;
+  const resultCardAnim   = useRef(new Animated.Value(0)).current;
+  const pointsBadgeScale = useRef(new Animated.Value(0)).current;
+  const throwButtonPulse = useRef(new Animated.Value(0)).current;
+  const throwButtonPress = useRef(new Animated.Value(1)).current;
+  const homeButtonPulse  = useRef(new Animated.Value(0)).current;
+  // Loop handles for cleanup
+  const timerLoop   = useRef<Animated.CompositeAnimation | null>(null);
+  const throwLoop   = useRef<Animated.CompositeAnimation | null>(null);
+  const homeLoop    = useRef<Animated.CompositeAnimation | null>(null);
+  // Track previous points value to detect async arrival
+  const prevPointsRef = useRef<number | null | undefined>(undefined);
+
+  // ─── Timer heartbeat (thrower only) ───────────────────────────────────────
+  useEffect(() => {
+    const on =
+      smokeBomb?.status === 'active' &&
+      smokeBomb?.thrown_by === profile?.id &&
+      session?.status === 'active';
+
+    if (on) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(timerPulse, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(timerPulse, { toValue: 0, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      );
+      timerLoop.current = loop;
+      loop.start();
+    } else {
+      timerLoop.current?.stop();
+      timerLoop.current = null;
+      timerPulse.setValue(0);
+    }
+    return () => { timerLoop.current?.stop(); };
+  }, [smokeBomb?.status, smokeBomb?.thrown_by, profile?.id, session?.status, timerPulse]);
+
+  // ─── Throw button idle pulse ───────────────────────────────────────────────
+  useEffect(() => {
+    const on =
+      session?.status !== 'closed' &&
+      !(smokeBomb?.status === 'active' && smokeBomb?.thrown_by === profile?.id);
+
+    if (on) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(throwButtonPulse, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(throwButtonPulse, { toValue: 0, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ]),
+      );
+      throwLoop.current = loop;
+      loop.start();
+    } else {
+      throwLoop.current?.stop();
+      throwLoop.current = null;
+      throwButtonPulse.setValue(0);
+    }
+    return () => { throwLoop.current?.stop(); };
+  }, [session?.status, smokeBomb?.status, smokeBomb?.thrown_by, profile?.id, throwButtonPulse]);
+
+  // ─── Home button pulse (thrower only) ─────────────────────────────────────
+  useEffect(() => {
+    const on =
+      smokeBomb?.status === 'active' &&
+      smokeBomb?.thrown_by === profile?.id &&
+      session?.status === 'active';
+
+    if (on) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(homeButtonPulse, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(homeButtonPulse, { toValue: 0, duration: 750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      );
+      homeLoop.current = loop;
+      loop.start();
+    } else {
+      homeLoop.current?.stop();
+      homeLoop.current = null;
+      homeButtonPulse.setValue(0);
+    }
+    return () => { homeLoop.current?.stop(); };
+  }, [smokeBomb?.status, smokeBomb?.thrown_by, profile?.id, session?.status, homeButtonPulse]);
+
+  // ─── Points badge pop (async edge-function delivery) ──────────────────────
+  useEffect(() => {
+    const pts = smokeBomb?.points_earned;
+    if (prevPointsRef.current !== undefined && pts != null && prevPointsRef.current == null) {
+      Animated.sequence([
+        Animated.spring(pointsBadgeScale, { toValue: 1.2, tension: 200, friction: 8, useNativeDriver: true }),
+        Animated.spring(pointsBadgeScale, { toValue: 1,   tension: 180, friction: 10, useNativeDriver: true }),
+      ]).start();
+    }
+    prevPointsRef.current = pts;
+  }, [smokeBomb?.points_earned, pointsBadgeScale]);
 
   const isActiveThrowee =
     smokeBomb?.status === 'active' && smokeBomb.thrown_by === profile?.id && session?.status === 'active';
@@ -111,20 +214,58 @@ export default function SessionScreen() {
         getBadgesForUsers(m.map(mem => mem.user_id)).then(setBadgesMap).catch(() => {});
       }
 
-      // Start timer only if bomb is currently active
       if (bomb?.status === 'active' && bomb.activated_at) startTimer(bomb.activated_at);
 
-      // If session already closed, don't subscribe
-      if (s.status === 'closed') { setLoading(false); return; }
+      // Already-closed session: skip animation, show results immediately
+      if (s.status === 'closed') {
+        resultCardAnim.setValue(1);
+        if (bomb?.points_earned != null) pointsBadgeScale.setValue(1);
+        setLoading(false);
+        return;
+      }
 
-      // Subscribe to real-time updates
       channelRef.current = subscribeToSession(
         id,
         updatedSession => {
           setSession(updatedSession);
-          if (updatedSession.status === 'closed') stopTimer();
+          if (updatedSession.status === 'closed') {
+            stopTimer();
+            resultCardAnim.setValue(0);
+            Animated.spring(resultCardAnim, {
+              toValue: 1,
+              tension: 120,
+              friction: 14,
+              useNativeDriver: true,
+            }).start();
+          }
         },
         updatedBomb => {
+          // Burst animation — thrower only, on the moment they throw
+          if (updatedBomb?.status === 'active' && updatedBomb.thrown_by === profileRef.current?.id) {
+            bombCardOpacity.setValue(0);
+            bombEmojiScale.setValue(1);
+            bombCardShake.setValue(0);
+            Animated.parallel([
+              Animated.timing(bombCardOpacity, {
+                toValue: 1,
+                duration: 300,
+                easing: Easing.out(Easing.ease),
+                useNativeDriver: true,
+              }),
+              Animated.sequence([
+                Animated.spring(bombEmojiScale, { toValue: 1.8, tension: 200, friction: 5,  useNativeDriver: true }),
+                Animated.spring(bombEmojiScale, { toValue: 1,   tension: 200, friction: 8,  useNativeDriver: true }),
+              ]),
+              Animated.sequence([
+                Animated.timing(bombCardShake, { toValue:  8, duration: 60, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(bombCardShake, { toValue: -8, duration: 60, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(bombCardShake, { toValue:  5, duration: 60, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(bombCardShake, { toValue: -5, duration: 60, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(bombCardShake, { toValue:  0, duration: 60, easing: Easing.linear, useNativeDriver: true }),
+              ]),
+            ]).start();
+          }
+
           setSmokeBomb(updatedBomb);
           if (updatedBomb?.status === 'active' && updatedBomb.activated_at) {
             startTimer(updatedBomb.activated_at);
@@ -148,7 +289,7 @@ export default function SessionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, startTimer, stopTimer]);
+  }, [id, startTimer, stopTimer, resultCardAnim, pointsBadgeScale, bombCardOpacity, bombEmojiScale, bombCardShake]);
 
   useEffect(() => {
     load();
@@ -158,7 +299,6 @@ export default function SessionScreen() {
     };
   }, [load, stopTimer]);
 
-  // Load accusations whenever we have a smoke bomb (active or closed session)
   useEffect(() => {
     if (smokeBomb?.id) {
       getAccusations(smokeBomb.id).then(setAccusations).catch(() => {});
@@ -214,11 +354,7 @@ export default function SessionScreen() {
       "Wrong accusation costs you 5 points.",
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Point the finger!',
-          style: 'destructive',
-          onPress: () => submitAccusation(target),
-        },
+        { text: 'Point the finger!', style: 'destructive', onPress: () => submitAccusation(target) },
       ],
     );
   }
@@ -236,13 +372,10 @@ export default function SessionScreen() {
       );
       setShowAccuseModal(false);
       if (isCorrect) {
-        const body = caughtMessage
-          ? `They left you a message:\n\n"${caughtMessage}"`
-          : 'You busted them!';
+        const body = caughtMessage ? `They left you a message:\n\n"${caughtMessage}"` : 'You busted them!';
         Alert.alert(`🕵️ Caught! It was ${target.users.username}.`, body);
       } else {
         Alert.alert('Wrong! 🤦', `${target.users.username} didn't sneak out. -5 points.`);
-        // Refresh list so "Already accused" label appears immediately
         const updated = await getAccusations(smokeBomb.id);
         setAccusations(updated);
       }
@@ -267,7 +400,6 @@ export default function SessionScreen() {
             setClosing(true);
             try {
               await closeSession(session.id);
-              // Real-time update will set status to closed
             } catch (e: any) {
               Alert.alert('Error', e.message ?? 'Could not close session.');
               setClosing(false);
@@ -286,10 +418,19 @@ export default function SessionScreen() {
     );
   }
 
-  const isClosed = session?.status === 'closed';
-  const hasBomb = smokeBomb?.status === 'active';
+  const isClosed  = session?.status === 'closed';
+  const hasBomb   = smokeBomb?.status === 'active';
   const isThrower = hasBomb && smokeBomb?.thrown_by === profile?.id;
-  const bomber = members.find(m => m.user_id === smokeBomb?.thrown_by);
+  const bomber    = members.find(m => m.user_id === smokeBomb?.thrown_by);
+
+  const timerOpacity     = timerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.65] });
+  const timerScale       = timerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] });
+  const throwIdleOpacity = throwButtonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.85] });
+  const throwIdleScale   = throwButtonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] });
+  const resultOpacity    = resultCardAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const resultTranslateY = resultCardAnim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
+  const homeOpacity      = homeButtonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] });
+  const homeScale        = homeButtonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
 
   return (
     <View style={styles.container}>
@@ -305,68 +446,73 @@ export default function SessionScreen() {
               <Text style={styles.statusClosed}>Session ended</Text>
             ) : (
               <>
-                <View style={styles.liveDot} />
+                <LiveDot />
                 <Text style={styles.statusLive}>Live</Text>
               </>
             )}
           </View>
         </View>
-        {/* Close session — visible to anyone who isn't the active thrower */}
         {!isClosed && !isThrower && (
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleCloseSession}
-            disabled={closing}
-          >
-            {closing ? (
-              <ActivityIndicator color={Colors.danger} size="small" />
-            ) : (
-              <Text style={styles.closeButtonText}>End</Text>
-            )}
+          <TouchableOpacity style={styles.closeButton} onPress={handleCloseSession} disabled={closing}>
+            {closing
+              ? <ActivityIndicator color={Colors.danger} size="small" />
+              : <Text style={styles.closeButtonText}>End</Text>}
           </TouchableOpacity>
         )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Smoke bomb status */}
+        {/* Bomb status card */}
         {!isClosed && (
-          <View style={[styles.bombCard, isThrower && styles.bombCardActive]}>
+          <Animated.View
+            style={[
+              styles.bombCard,
+              isThrower && styles.bombCardActive,
+              { opacity: bombCardOpacity, transform: [{ translateX: bombCardShake }] },
+            ]}
+          >
             {isThrower ? (
               <>
-                <Text style={styles.bombEmoji}>🏃</Text>
+                <Animated.View style={{ transform: [{ scale: bombEmojiScale }] }}>
+                  <Text style={styles.bombEmoji}>🏃</Text>
+                </Animated.View>
                 <Text style={styles.bombTitle}>You're on the run!</Text>
-                <Text style={styles.bombTimer}>{formatDuration(elapsed)}</Text>
+                <Animated.View style={{ opacity: timerOpacity, transform: [{ scale: timerScale }] }}>
+                  <Text style={styles.bombTimer}>{formatDuration(elapsed)}</Text>
+                </Animated.View>
                 <Text style={styles.bombSubtitle}>
                   Don't get caught. Tap "I'm home" when you're safe.
                 </Text>
               </>
             ) : (
               <>
-                <Text style={styles.bombEmoji}>🕺</Text>
+                <Animated.View style={{ transform: [{ scale: bombEmojiScale }] }}>
+                  <Text style={styles.bombEmoji}>🕺</Text>
+                </Animated.View>
                 <Text style={styles.bombTitle}>Everyone's still here</Text>
                 <Text style={styles.bombSubtitle}>
                   Throw a smoke bomb to ghost your crew silently
                 </Text>
               </>
             )}
-          </View>
+          </Animated.View>
         )}
 
-        {/* I'm home — only visible to the thrower while bomb is active */}
+        {/* I'm home button */}
         {!isClosed && hasBomb && isThrower && (
           <>
-            <TouchableOpacity
-              style={styles.homeButton}
-              onPress={handleArriveHome}
-              disabled={arrivingHome}
-            >
-              {arrivingHome ? (
-                <ActivityIndicator color={Colors.background} />
-              ) : (
-                <Text style={styles.homeButtonText}>🏠  I'm home!</Text>
-              )}
-            </TouchableOpacity>
+            <Animated.View style={{ opacity: homeOpacity, transform: [{ scale: homeScale }] }}>
+              <TouchableOpacity
+                style={styles.homeButton}
+                onPress={handleArriveHome}
+                disabled={arrivingHome}
+              >
+                {arrivingHome
+                  ? <ActivityIndicator color={Colors.background} />
+                  : <Text style={styles.homeButtonText}>🏠  I'm home!</Text>}
+              </TouchableOpacity>
+            </Animated.View>
             <Text style={styles.gpsStatus}>
               {gpsTracking
                 ? '📍 GPS auto-detection active'
@@ -377,8 +523,14 @@ export default function SessionScreen() {
           </>
         )}
 
+        {/* Closed result card */}
         {isClosed && (
-          <View style={styles.closedCard}>
+          <Animated.View
+            style={[
+              styles.closedCard,
+              { opacity: resultOpacity, transform: [{ translateY: resultTranslateY }] },
+            ]}
+          >
             {smokeBomb?.status === 'escaped' ? (
               <>
                 <Text style={styles.closedEmoji}>💨</Text>
@@ -389,12 +541,14 @@ export default function SessionScreen() {
                   <Text style={styles.victoryMessage}>"{smokeBomb.victory_message}"</Text>
                 ) : null}
                 {smokeBomb.points_earned !== null && smokeBomb.points_earned !== undefined ? (
-                  <View style={styles.pointsBadge}>
-                    <Text style={styles.pointsText}>
-                      {smokeBomb.thrown_by === profile?.id ? 'You earned ' : ''}
-                      +{smokeBomb.points_earned} pts
-                    </Text>
-                  </View>
+                  <Animated.View style={{ transform: [{ scale: pointsBadgeScale }] }}>
+                    <View style={styles.pointsBadge}>
+                      <Text style={styles.pointsText}>
+                        {smokeBomb.thrown_by === profile?.id ? 'You earned ' : ''}
+                        +{smokeBomb.points_earned} pts
+                      </Text>
+                    </View>
+                  </Animated.View>
                 ) : (
                   <Text style={styles.pointsCalculating}>Calculating points…</Text>
                 )}
@@ -440,7 +594,7 @@ export default function SessionScreen() {
                 </TouchableOpacity>
               </>
             )}
-          </View>
+          </Animated.View>
         )}
 
         {/* Player list */}
@@ -450,7 +604,6 @@ export default function SessionScreen() {
             const isMe = member.user_id === profile?.id;
             const avatarUrl = member.users.avatar_url ?? generateAvatarUrl(member.user_id);
             const isBomber = smokeBomb?.thrown_by === member.user_id;
-
             return (
               <View key={member.id} style={[styles.playerRow, isMe && styles.playerRowMe]}>
                 <Image source={{ uri: avatarUrl }} style={styles.avatar} />
@@ -465,7 +618,6 @@ export default function SessionScreen() {
                     </Text>
                   )}
                 </View>
-                {/* Only show if session is closed and thrower is revealed */}
                 {isClosed && isBomber && (
                   <Text style={styles.throwerTag}>💨 Bomber</Text>
                 )}
@@ -474,24 +626,34 @@ export default function SessionScreen() {
           })}
         </View>
 
-        {/* Accuse — visible to non-throwers during an active session */}
+        {/* Accuse button */}
         {!isClosed && !isThrower && (
-          <TouchableOpacity
-            style={styles.accuseButton}
-            onPress={() => setShowAccuseModal(true)}
-          >
+          <TouchableOpacity style={styles.accuseButton} onPress={() => setShowAccuseModal(true)}>
             <Text style={styles.accuseButtonText}>🫵 Point the finger</Text>
           </TouchableOpacity>
         )}
 
-        {/* Throw smoke bomb — hidden only from the active thrower */}
+        {/* Throw smoke bomb button */}
         {!isClosed && !isThrower && (
-          <TouchableOpacity
-            style={styles.throwButton}
-            onPress={() => setShowThrowModal(true)}
+          <Animated.View
+            style={{
+              opacity: throwIdleOpacity,
+              transform: [{ scale: throwIdleScale }, { scale: throwButtonPress }],
+            }}
           >
-            <Text style={styles.throwButtonText}>💨 Throw smoke bomb</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.throwButton}
+              onPress={() => setShowThrowModal(true)}
+              onPressIn={() =>
+                Animated.spring(throwButtonPress, { toValue: 0.95, tension: 300, friction: 10, useNativeDriver: true }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(throwButtonPress, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }).start()
+              }
+            >
+              <Text style={styles.throwButtonText}>💨 Throw smoke bomb</Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </ScrollView>
 
@@ -505,9 +667,7 @@ export default function SessionScreen() {
         <View style={styles.modalKeyboard} pointerEvents="box-none">
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>👀 Who snuck out?</Text>
-            <Text style={styles.modalSubtitle}>
-              Wrong accusation costs 5 points. Choose wisely.
-            </Text>
+            <Text style={styles.modalSubtitle}>Wrong accusation costs 5 points. Choose wisely.</Text>
             {members
               .filter(m => m.user_id !== profile?.id)
               .map(member => {
@@ -519,10 +679,7 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     key={member.id}
                     style={[styles.accusePlayerRow, alreadyAccused && styles.accusePlayerRowDim]}
-                    onPress={() => {
-                      setShowAccuseModal(false);
-                      handleAccuseTap(member);
-                    }}
+                    onPress={() => { setShowAccuseModal(false); handleAccuseTap(member); }}
                     disabled={alreadyAccused || !!accusingUserId}
                     activeOpacity={0.7}
                   >
@@ -551,7 +708,7 @@ export default function SessionScreen() {
         </View>
       </Modal>
 
-      {/* Throw smoke bomb modal */}
+      {/* Throw modal */}
       <Modal visible={showThrowModal} transparent animationType="slide">
         <TouchableOpacity
           style={styles.modalOverlay}
@@ -568,7 +725,6 @@ export default function SessionScreen() {
             <Text style={styles.modalSubtitle}>
               Your crew won't get a notification — they'll only know when the timer starts.
             </Text>
-
             <Text style={styles.inputLabel}>Victory message</Text>
             <TextInput
               style={styles.textInput}
@@ -579,7 +735,6 @@ export default function SessionScreen() {
               multiline
               maxLength={200}
             />
-
             <Text style={styles.inputLabel}>Caught message</Text>
             <TextInput
               style={styles.textInput}
@@ -590,7 +745,6 @@ export default function SessionScreen() {
               multiline
               maxLength={200}
             />
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
@@ -604,11 +758,9 @@ export default function SessionScreen() {
                 onPress={handleThrowSmokeBomb}
                 disabled={throwing}
               >
-                {throwing ? (
-                  <ActivityIndicator color={Colors.background} />
-                ) : (
-                  <Text style={styles.modalThrowText}>Throw it!</Text>
-                )}
+                {throwing
+                  ? <ActivityIndicator color={Colors.background} />
+                  : <Text style={styles.modalThrowText}>Throw it!</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -656,12 +808,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: Colors.danger,
   },
   statusLive: {
     fontSize: FontSize.xs,
