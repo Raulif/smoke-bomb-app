@@ -134,7 +134,7 @@ export interface Database {
           thrown_by: string;
           activated_at: string;
           arrived_home_at: string | null;
-          status: 'active' | 'discovered' | 'escaped';
+          status: 'active' | 'discovered' | 'escaped' | 'cancelled';
           victory_message: string | null;
           caught_message: string | null;
           points_earned: number | null;
@@ -145,7 +145,7 @@ export interface Database {
           thrown_by: string;
           activated_at?: string;
           arrived_home_at?: string | null;
-          status?: 'active' | 'discovered' | 'escaped';
+          status?: 'active' | 'discovered' | 'escaped' | 'cancelled';
           victory_message?: string | null;
           caught_message?: string | null;
           points_earned?: number | null;
@@ -156,7 +156,7 @@ export interface Database {
           thrown_by?: string;
           activated_at?: string;
           arrived_home_at?: string | null;
-          status?: 'active' | 'discovered' | 'escaped';
+          status?: 'active' | 'discovered' | 'escaped' | 'cancelled';
           victory_message?: string | null;
           caught_message?: string | null;
           points_earned?: number | null;

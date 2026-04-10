@@ -24,6 +24,7 @@ import {
   getSession,
   getLatestSmokeBomb,
   throwSmokeBomb,
+  cancelSmokeBomb,
   arriveHome,
   closeSession,
   makeAccusation,
@@ -275,6 +276,7 @@ export default function SessionScreen() {
             if (
               !caughtAlertShown.current &&
               updatedBomb?.status === 'discovered' &&
+              updatedBomb?.status !== 'cancelled' &&
               updatedBomb.thrown_by === profileRef.current?.id
             ) {
               caughtAlertShown.current = true;
@@ -337,6 +339,28 @@ export default function SessionScreen() {
               Alert.alert('Error', e.message ?? 'Could not mark arrival.');
             } finally {
               setArrivingHome(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleCancelSmokeBomb() {
+    if (!smokeBomb) return;
+    Alert.alert(
+      'Cancel smoke bomb?',
+      "You'll return to the game as if nothing happened.",
+      [
+        { text: 'Keep running', style: 'cancel' },
+        {
+          text: 'Cancel bomb',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelSmokeBomb(smokeBomb.id);
+            } catch (e: any) {
+              Alert.alert('Error', e.message ?? 'Could not cancel smoke bomb.');
             }
           },
         },
@@ -520,6 +544,9 @@ export default function SessionScreen() {
                 ? 'Set a home address in your profile to enable GPS auto-detection'
                 : 'Starting GPS detection…'}
             </Text>
+            <TouchableOpacity style={styles.cancelBombButton} onPress={handleCancelSmokeBomb}>
+              <Text style={styles.cancelBombText}>Cancel bomb</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -968,6 +995,17 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     marginTop: -Spacing.xs,
+  },
+  cancelBombButton: {
+    alignSelf: 'center',
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  cancelBombText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    textDecorationLine: 'underline',
   },
   victoryMessage: {
     fontSize: FontSize.md,

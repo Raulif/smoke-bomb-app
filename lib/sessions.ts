@@ -36,6 +36,25 @@ export async function throwSmokeBomb(
   return data;
 }
 
+export async function cancelSmokeBomb(bombId: string): Promise<void> {
+  const { count } = await supabase
+    .from('accusations')
+    .select('*', { count: 'exact', head: true })
+    .eq('smoke_bomb_id', bombId);
+
+  if (count && count > 0) {
+    throw new Error('Cannot cancel — an accusation has already been made.');
+  }
+
+  const { error } = await supabase
+    .from('smoke_bombs')
+    .update({ status: 'cancelled' })
+    .eq('id', bombId)
+    .eq('status', 'active');
+
+  if (error) throw error;
+}
+
 export async function arriveHome(smokeBombId: string, sessionId: string): Promise<void> {
   const { error } = await supabase
     .from('smoke_bombs')
@@ -78,6 +97,7 @@ export async function getLatestSmokeBomb(sessionId: string): Promise<SmokeBombRo
     .from('smoke_bombs')
     .select('*')
     .eq('session_id', sessionId)
+    .neq('status', 'cancelled')
     .order('activated_at', { ascending: false })
     .limit(1)
     .single();
