@@ -3,7 +3,8 @@
     "allow": [
       "Skill(claude-api)",
       "Skill(claude-api:*)",
-      "Bash(supabase --version)"
+      "Bash(supabase --version)",
+      "Bash(npx expo:*)"
     ]
   }
 }
