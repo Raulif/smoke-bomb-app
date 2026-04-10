@@ -5,6 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider } from '../lib/auth';
 import { Colors } from '../lib/theme';
+// Side-effect import: ensures the background geofence TaskManager task is
+// registered on every app launch, including OS background wake-ups.
+import '../lib/location';
 
 // Show notifications when app is foregrounded
 Notifications.setNotificationHandler({
