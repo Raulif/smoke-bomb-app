@@ -17,7 +17,7 @@ import { useAuth } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 
 export default function SignInScreen() {
-  const { signInWithPhone, signInWithGoogle, signInWithApple } = useAuth();
+  const { signInWithPhone, signInWithGoogle, signInWithApple, devLogin } = useAuth();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
@@ -48,6 +48,17 @@ export default function SignInScreen() {
       Alert.alert('Error', e.message ?? 'Google sign-in failed.');
     } finally {
       setOauthLoading(null);
+    }
+  }
+
+  async function handleDevLogin() {
+    setLoading(true);
+    try {
+      await devLogin();
+    } catch (e: any) {
+      Alert.alert('Dev Login Error', e.message ?? 'Failed to sign in anonymously.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -129,6 +140,22 @@ export default function SignInScreen() {
             />
           )}
         </View>
+        {__DEV__ && (
+          <View style={styles.devSection}>
+            <Text style={styles.devLabel}>— DEV ONLY —</Text>
+            <TouchableOpacity
+              style={[styles.devButton, loading && styles.buttonDisabled]}
+              onPress={handleDevLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : (
+                <Text style={styles.devButtonText}>Skip auth (dev login)</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -227,5 +254,27 @@ const styles = StyleSheet.create({
   appleButton: {
     height: 50,
     width: '100%',
+  },
+  devSection: {
+    marginTop: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  devLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+    letterSpacing: 1,
+  },
+  devButton: {
+    backgroundColor: '#f59e0b',
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    alignItems: 'center',
+    width: '100%',
+  },
+  devButtonText: {
+    color: '#000',
+    fontSize: FontSize.md,
+    fontWeight: '700',
   },
 });
