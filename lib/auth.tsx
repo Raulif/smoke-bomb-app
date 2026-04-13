@@ -18,6 +18,7 @@ type AuthContextType = {
   verifyOtp: (phone: string, token: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
+  devLogin: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: { username: string; avatar_url?: string }) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -134,6 +135,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  async function devLogin() {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+    if (!data.user || !data.session) throw new Error('No session returned');
+
+    const userId = data.user.id;
+    const avatarUrl = generateAvatarUrl(userId);
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('users')
+      .upsert({ id: userId, username: 'dev_user', avatar_url: avatarUrl })
+      .select()
+      .single();
+
+    if (profileError) throw profileError;
+    // Set state directly to avoid race with onAuthStateChange's fetchProfile
+    setSession(data.session);
+    setProfile(profileData);
+    setLoading(false);
+  }
+
   async function signOut() {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -168,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyOtp,
       signInWithGoogle,
       signInWithApple,
+      devLogin,
       signOut,
       updateProfile,
       refreshProfile,
