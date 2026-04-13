@@ -16,6 +16,8 @@ type AuthContextType = {
   loading: boolean;
   signInWithPhone: (phone: string) => Promise<void>;
   verifyOtp: (phone: string, token: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   devLogin: () => Promise<void>;
@@ -94,6 +96,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function verifyOtp(phone: string, token: string) {
     const { error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
     if (error) throw error;
+  }
+
+  async function signInWithEmail(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }
+
+  async function signUpWithEmail(email: string, password: string): Promise<{ needsConfirmation: boolean }> {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    return { needsConfirmation: !data.session };
   }
 
   async function signInWithGoogle() {
@@ -188,6 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       signInWithPhone,
       verifyOtp,
+      signInWithEmail,
+      signUpWithEmail,
       signInWithGoogle,
       signInWithApple,
       devLogin,

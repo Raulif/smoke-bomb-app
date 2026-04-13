@@ -17,11 +17,21 @@ import { useAuth } from '../../lib/auth';
 import { Colors, Spacing, FontSize, Radius } from '../../lib/theme';
 
 export default function SignInScreen() {
-  const { signInWithPhone, signInWithGoogle, signInWithApple, devLogin } = useAuth();
+  const { signInWithPhone, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, devLogin } = useAuth();
+
+  const [authMode, setAuthMode] = useState<'phone' | 'email'>('phone');
+  const [emailMode, setEmailMode] = useState<'signin' | 'signup'>('signin');
+
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+
   const phoneRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   async function handlePhoneContinue() {
     const cleaned = phone.replace(/\s/g, '');
@@ -35,6 +45,37 @@ export default function SignInScreen() {
       router.push({ pathname: '/(auth)/verify', params: { phone: cleaned } });
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Failed to send code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEmailSubmit() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail.includes('@')) {
+      Alert.alert('Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('Password too short', 'Password must be at least 6 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (emailMode === 'signin') {
+        await signInWithEmail(trimmedEmail, password);
+      } else {
+        const { needsConfirmation } = await signUpWithEmail(trimmedEmail, password);
+        if (needsConfirmation) {
+          Alert.alert(
+            'Check your email',
+            'We sent you a confirmation link. Click it to verify your account, then sign in.',
+          );
+          setEmailMode('signin');
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -84,32 +125,105 @@ export default function SignInScreen() {
           <Text style={styles.subtitle}>Ghost your friends. Earn points.</Text>
         </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Phone number</Text>
-          <TextInput
-            ref={phoneRef}
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+1 555 000 0000"
-            placeholderTextColor={Colors.textTertiary}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            returnKeyType="done"
-            onSubmitEditing={handlePhoneContinue}
-          />
+        <View style={styles.tabRow}>
           <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handlePhoneContinue}
-            disabled={loading}
+            style={[styles.tab, authMode === 'phone' && styles.tabActive]}
+            onPress={() => setAuthMode('phone')}
           >
-            {loading ? (
-              <ActivityIndicator color={Colors.background} />
-            ) : (
-              <Text style={styles.primaryButtonText}>Send code</Text>
-            )}
+            <Text style={[styles.tabText, authMode === 'phone' && styles.tabTextActive]}>Phone</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, authMode === 'email' && styles.tabActive]}
+            onPress={() => setAuthMode('email')}
+          >
+            <Text style={[styles.tabText, authMode === 'email' && styles.tabTextActive]}>Email</Text>
           </TouchableOpacity>
         </View>
+
+        {authMode === 'phone' ? (
+          <View style={styles.form}>
+            <Text style={styles.label}>Phone number</Text>
+            <TextInput
+              ref={phoneRef}
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="+1 555 000 0000"
+              placeholderTextColor={Colors.textTertiary}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              returnKeyType="done"
+              onSubmitEditing={handlePhoneContinue}
+            />
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && styles.buttonDisabled]}
+              onPress={handlePhoneContinue}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={Colors.background} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Send code</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.form}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              ref={emailRef}
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={Colors.textTertiary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+            <Text style={[styles.label, { marginTop: Spacing.xs }]}>Password</Text>
+            <TextInput
+              ref={passwordRef}
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Min. 6 characters"
+              placeholderTextColor={Colors.textTertiary}
+              secureTextEntry
+              autoComplete={emailMode === 'signup' ? 'new-password' : 'password'}
+              textContentType={emailMode === 'signup' ? 'newPassword' : 'password'}
+              returnKeyType="done"
+              onSubmitEditing={handleEmailSubmit}
+            />
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && styles.buttonDisabled]}
+              onPress={handleEmailSubmit}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={Colors.background} />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {emailMode === 'signin' ? 'Sign in' : 'Create account'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.toggleModeButton}
+              onPress={() => setEmailMode(emailMode === 'signin' ? 'signup' : 'signin')}
+            >
+              <Text style={styles.toggleModeText}>
+                {emailMode === 'signin'
+                  ? "Don't have an account? Sign up"
+                  : 'Already have an account? Sign in'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
@@ -170,7 +284,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
   emoji: {
     fontSize: 64,
@@ -186,6 +300,32 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: 4,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderRadius: Radius.sm,
+  },
+  tabActive: {
+    backgroundColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  tabTextActive: {
+    color: Colors.background,
   },
   form: {
     gap: Spacing.sm,
@@ -219,6 +359,14 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: FontSize.md,
     fontWeight: '700',
+  },
+  toggleModeButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  toggleModeText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
   },
   divider: {
     flexDirection: 'row',
